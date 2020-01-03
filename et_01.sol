@@ -31,4 +31,24 @@ contract EnergyTrading {
         balanceOf[_from] -= _value;                         // Subtract from the sender
         balanceOf[_to] += _value;                           // Add the same to the recipient
     }
+
+    /////////////
+    //   bid   //
+    /////////////
+    struct bid_struct {
+        uint256[] volumn;
+        uint256[] price;
+    }
+    // time => type(buy/sell) => user_address => bid_struct
+    mapping (string => mapping (string => mapping (address => bid_struct))) bids;
+
+    event bid_log(address _user, string _bid_time, string _bid_type, uint256[] _volumn, uint256[] _price);
+
+    function bid(address _user, string memory _bid_time, string memory _bid_type, uint256[] memory _volumn, uint256[] memory _price) public isCreator(msg.sender) {
+        bids[_bid_time][_bid_type][_user] = bid_struct({
+            volumn: _volumn,
+            price: _price
+        });
+        emit bid_log(_user, _bid_time, _bid_type, _volumn, _price);
+    }
 }
