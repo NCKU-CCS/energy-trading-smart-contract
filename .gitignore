@@ -374,3 +374,6 @@ node_modules
 bin_output
 logs
 
+# Testing file
+cost.txt
+sorting.sol
