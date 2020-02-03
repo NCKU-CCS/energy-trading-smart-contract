@@ -77,29 +77,30 @@ contract EnergyTrading {
     uint256[] sell_volumes;
     address[] sell_users;
 
+    event array_log(uint256[] _volume, uint256[] _price, address[] _users);
+
+    function getArrayLog() public {
+        emit array_log(buy_volumes, buy_prices, buy_users);
+        emit array_log(sell_volumes, sell_prices, sell_users);
+    }
+
     function match_bids(
         address[] memory _users,
         string memory _bid_time
     ) public isCreator(msg.sender) {
         // GET DEMAND-REQUEST LINES
-        _match_clear_array();                       // Clear array for each match event
-        _match_combine_array(_bid_time, _users);    // Combine bids for every user
-        _bubble_sort_array();                       // Resorting array
-        // _bubble_sort_array();                        // Resorting array
-        // _bubble_sort_array();                        // Resorting array
-
+        _clear_match_array();                       // Clear array for each match event
+        _combine_match_array(_bid_time, _users);    // Combine bids for every user
+        getArrayLog();
+        _sort_array();                              // sorting array
+        _accumulate_array();
+        getArrayLog();
         // Finding match intersection
 
         // Split bids by margin
     }
 
-    function get_combine_array()
-        public view returns(uint256[] memory _prices)
-    {
-        return buy_prices;
-    }
-
-    function _match_clear_array() private {
+    function _clear_match_array() private {
         // Reset dynamic arrays for match bids
         buy_prices.length = 0;
         buy_volumes.length = 0;
@@ -109,7 +110,7 @@ contract EnergyTrading {
         sell_users.length = 0;
     }
 
-    function _match_combine_array(
+    function _combine_match_array(
         string memory _bid_time, address[] memory _users
     ) private {
         // users' buys
@@ -131,9 +132,9 @@ contract EnergyTrading {
         for(uint256 i = 0; i < _users.length; i++) {
             uint256[] memory prices;
             uint256[] memory volumes;
-            bid_struct memory user_buy_bids = bids[_bid_time]["sell"][_users[i]];
-            prices = user_buy_bids.price;
-            volumes = user_buy_bids.volumn;
+            bid_struct memory user_sell_bids = bids[_bid_time]["sell"][_users[i]];
+            prices = user_sell_bids.price;
+            volumes = user_sell_bids.volumn;
 
             for(uint256 j = 0; j < prices.length; j++) {
                 sell_prices.push(prices[j]);
@@ -143,94 +144,85 @@ contract EnergyTrading {
         }
     }
 
-    // bubble sort
-    function _bubble_sort_array() private {
-        uint256 l;
-        l = buy_prices.length;
-        for(uint256 i = 0; i < l; i++) {
-            for(uint256 j = i+1; j < l ;j++) {
-                // ascending sorting
-                if(buy_prices[i] > buy_prices[j]) {
-                    // buy
-                    // change price
-                    uint256 b_price = buy_prices[i];
-                    buy_prices[i] = buy_prices[j];
-                    buy_prices[j] = b_price;
-                    // change volume
-                    uint256 b_volume = buy_volumes[i];
-                    buy_volumes[i] = buy_volumes[j];
-                    buy_volumes[j] = b_volume;
-                    // change user
-                    address b_user = buy_users[i];
-                    buy_users[i] = buy_users[j];
-                    buy_users[j] = b_user;
-                }
-            }
-        }
-        l = sell_prices.length;
-        for(uint256 i = 0; i < l; i++) {
-            for(uint256 j = i+1; j < l ;j++) {
-                // descending sorting
-                if(sell_prices[i] < sell_prices[j]) {
-                    // sell
-                    // change price
-                    uint256 s_price = sell_prices[i];
-                    sell_prices[i] = sell_prices[j];
-                    sell_prices[j] = s_price;
-                    // change volume
-                    uint256 s_volume = sell_volumes[i];
-                    sell_volumes[i] = sell_volumes[j];
-                    sell_volumes[j] = s_volume;
-                    // change user
-                    address s_user = sell_users[i];
-                    sell_users[i] = sell_users[j];
-                    sell_users[j] = s_user;
-                }
-            }
-        }
-    }
-
     // insertion sort
-    function _insertion_sort_array() private {
-        uint256 l;
+    function _sort_array() private {
         uint256 j;
-
-        l = buy_prices.length;
         uint256 b_price_key;
         uint256 b_volume_key;
         address b_user_key;
-        for (uint256 i = 1; i < l; i++) {
+        for (uint256 i = 1; i < buy_prices.length; i++) {
             b_price_key = buy_prices[i];
+            b_volume_key = buy_volumes[i];
+            b_user_key = buy_users[i];
             j = i - 1;
-            while (j >= 0 && buy_prices[j] > b_price_key)
+            bool flag = false;
+            while (j >= 0 && buy_prices[j] < b_price_key)
             {
                 buy_prices[j + 1] = buy_prices[j];
                 buy_volumes[j + 1] = buy_volumes[j];
                 buy_users[j + 1] = buy_users[j];
-                j = j - 1;
+                if(j == 0) {
+                    flag = true;
+                    break;
+                } else {
+                    j = j - 1;
+                }
             }
-            buy_prices[j + 1] = b_price_key;
-            buy_volumes[j + 1] = b_volume_key;
-            buy_users[j + 1] = b_user_key;
+            if(flag) {
+                buy_prices[0] = b_price_key;
+                buy_volumes[0] = b_volume_key;
+                buy_users[0] = b_user_key;
+            } else {
+                buy_prices[j + 1] = b_price_key;
+                buy_volumes[j + 1] = b_volume_key;
+                buy_users[j + 1] = b_user_key;
+            }
         }
 
-        l = sell_prices.length;
         uint256 s_price_key;
         uint256 s_volume_key;
         address s_user_key;
-        for (uint256 i = 1; i < l; i++) {
+        for (uint256 i = 1; i < sell_prices.length; i++) {
             s_price_key = sell_prices[i];
+            s_volume_key = sell_volumes[i];
+            s_user_key = sell_users[i];
             j = i - 1;
+            bool flag = false;
             while (j >= 0 && sell_prices[j] > s_price_key)
             {
                 sell_prices[j + 1] = sell_prices[j];
                 sell_volumes[j + 1] = sell_volumes[j];
                 sell_users[j + 1] = sell_users[j];
-                j = j - 1;
+                if(j == 0) {
+                    flag = true;
+                    break;
+                } else {
+                    j = j - 1;
+                }
             }
-            sell_prices[j + 1] = s_price_key;
-            sell_volumes[j + 1] = s_volume_key;
-            sell_users[j + 1] = s_user_key;
+            if(flag) {
+                sell_prices[0] = s_price_key;
+                sell_volumes[0] = s_volume_key;
+                sell_users[0] = s_user_key;
+            } else {
+                sell_prices[j + 1] = s_price_key;
+                sell_volumes[j + 1] = s_volume_key;
+                sell_users[j + 1] = s_user_key;
+            }
+        }
+    }
+
+    function _accumulate_array() private {
+        uint256 curr_volume = 0;
+        for (uint256 i = 0; i < buy_volumes.length; i++) {
+            buy_volumes[i] += curr_volume;
+            curr_volume = buy_volumes[i];
+        }
+
+        curr_volume = 0;
+        for (uint256 i = 0; i < sell_volumes.length; i++) {
+            sell_volumes[i] += curr_volume;
+            curr_volume = sell_volumes[i];
         }
     }
 }
