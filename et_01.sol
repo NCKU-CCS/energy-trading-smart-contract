@@ -113,13 +113,13 @@ contract EnergyTrading {
 
     // event that logs matched result
     event match_result(
-        bool,
-        uint256,
-        uint256,
-        address[],
-        uint256[],
-        address[],
-        uint256[]
+        bool _matched,
+        uint256 _matched_volume,
+        uint256 _matched_price,
+        address[] _buyers,
+        uint256[] _buyers_ratio,
+        address[] _sellers,
+        uint256[] _sellers_ratio
     );
 
 
@@ -142,13 +142,13 @@ contract EnergyTrading {
 
         // emit matched result
         emit match_result(
-            matched,
-            uint256(line_points[2][0]),
-            uint256(line_points[2][1]),
-            matched_buy_users,
-            matched_buy_ratios,
-            matched_sell_users,
-            matched_sell_ratios
+            matched,                    // match success?
+            uint256(line_points[2][0]), // matched volume
+            uint256(line_points[2][1]), // matched price
+            matched_buy_users,          // buyers' addresses
+            matched_buy_ratios,         // buyers' bid ratios
+            matched_sell_users,         // sellers' addresses
+            matched_sell_ratios         // sellers' bid ratios
         );
     }
 
