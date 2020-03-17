@@ -1,3 +1,4 @@
+// solium-disable linebreak-style
 pragma solidity >=0.5.0 <0.7.0;
 
 contract EnergyTrading {
@@ -44,36 +45,15 @@ contract EnergyTrading {
 
     event bid_log(address _user, string _bid_time, string _bid_type, uint256[] _volumn, uint256[] _price);
 
-    function bid(address _user, string memory _bid_time, string memory _bid_type, uint256[] memory _volumn, uint256[] memory _price) public IsCreator(msg.sender) {
-        bids[_bid_time][_bid_type][_user] = bid_struct({
-            volumn: _volumn,
-            price: _price
-        });
-        emit bid_log(_user, _bid_time, _bid_type, _volumn, _price);
-    }
-
-    /////////////
-    //   bid   //
-    /////////////
-    struct bid_struct {
-        uint256[] volumn;
-        uint256[] price;
-    }
-    // time => type(buy/sell) => user_address => bid_struct
-    mapping (string => mapping (string => mapping (address => bid_struct))) bids;
-
-    event bid_log(address _user, string _bid_time, string _bid_type, uint256[] _volumn, uint256[] _price);
-
     function bid(
         address _user,
         string memory _bid_time,
         string memory _bid_type,
         uint256[] memory _volumn,
         uint256[] memory _price
-    ) public isCreator(msg.sender) {
+    ) public IsCreator(msg.sender) {
         bids[_bid_time][_bid_type][_user] = bid_struct({
-            volumn: _volumn,
-            price: _price
+            volumn: _volumn, price: _price
         });
         emit bid_log(_user, _bid_time, _bid_type, _volumn, _price);
     }
@@ -90,6 +70,7 @@ contract EnergyTrading {
     //  match  //
     /////////////
 
+    // array of collected sells and buys
     uint256[] buy_prices;
     uint256[] buy_volumes;
     address[] buy_users;
@@ -97,39 +78,137 @@ contract EnergyTrading {
     uint256[] sell_volumes;
     address[] sell_users;
 
+    // array of accumulated sells and buys
+    uint256[] ab_prices;
+    uint256[] ab_volumes;
+    address[] ab_users;
+    uint256[] as_prices;
+    uint256[] as_volumes;
+    address[] as_users;
+
+    // array of accumulated and ready-to-match sells and buys
+    uint256[] mb_prices;
+    uint256[] mb_volumes;
+    address[] mb_users;
+    uint256[] ms_prices;
+    uint256[] ms_volumes;
+    address[] ms_users;
+
+    // array of matched sells, buys and ratios
+    address[] matched_buy_users;
+    uint256[] matched_buy_volumes;
+    uint256[] matched_buy_ratios;
+    address[] matched_sell_users;
+    uint256[] matched_sell_volumes;
+    uint256[] matched_sell_ratios;
+
+    // points of intersection lines
+    // intersection occurs when two lines intersect which will consist of four points
+    // they are line1point1, line1point2, line2point1, and line2point1
+    // in short l1p1, l1p2, l2p1, l2p2
+    int256[][] line_points;
+
+    // event that logs the sells and buys array
     event array_log(uint256[] _volume, uint256[] _price, address[] _users);
 
+    // event that logs line_points
+    event line_pts(
+        int256[2] l1p1,
+        int256[2] l1p2,
+        int256[2] l2p1,
+        int256[2] l2p2
+    );
+
+    // event that logs matched result
+    event match_result(
+        bool,
+        uint256,
+        uint256,
+        address[],
+        uint256[],
+        address[],
+        uint256[]
+    );
+
+    // function that trigger event of sell and buy
     function getArrayLog() public {
         emit array_log(buy_volumes, buy_prices, buy_users);
         emit array_log(sell_volumes, sell_prices, sell_users);
     }
 
+
+
+    /////////////
+    //  match  //
+    /////////////
     function match_bids(
         address[] memory _users,
         string memory _bid_time
-    ) public isCreator(msg.sender) {
-        // GET DEMAND-REQUEST LINES
+    ) public IsCreator(msg.sender) {
         _clear_match_array();                       // Clear array for each match event
         _combine_match_array(_bid_time, _users);    // Combine bids for every user
-        getArrayLog();
-        _sort_array();                              // sorting array
-        _accumulate_array();
-        getArrayLog();
-        // Finding match intersection
+        _accumulate_array();                        // Accumulate bids
+        _merge_array();                             // Merge bids
+        bool matched = _find_intersection();        // Finding match intersection
+        _find_shares(                               // Split bids by margin
+            uint256(line_points[0][1]),
+            uint256(line_points[2][1])
+        );
 
-        // Split bids by margin
+        // emit matched result
+        emit match_result(
+            matched,
+            uint256(line_points[2][0]),
+            uint256(line_points[2][1]),
+            matched_buy_users,
+            matched_buy_ratios,
+            matched_sell_users,
+            matched_sell_ratios
+        );
     }
 
+    //////////////////////////////
+    //  match helper functions  //
+    //////////////////////////////
+
+    // function that clear all the state variables (dynamic array)
     function _clear_match_array() private {
         // Reset dynamic arrays for match bids
-        buy_prices.length = 0;
-        buy_volumes.length = 0;
-        buy_users.length = 0;
-        sell_prices.length = 0;
-        sell_volumes.length = 0;
-        sell_users.length = 0;
+        delete buy_prices;
+        delete buy_volumes;
+        delete buy_users;
+        delete sell_prices;
+        delete sell_volumes;
+        delete sell_users;
+
+        // accumulated arrays
+        delete ab_prices;
+        delete ab_volumes;
+        delete ab_users;
+        delete as_prices;
+        delete as_volumes;
+        delete as_users;
+
+        // matching array
+        delete mb_prices;
+        delete mb_volumes;
+        delete mb_users;
+        delete ms_prices;
+        delete ms_volumes;
+        delete ms_users;
+
+        // matched_result array
+        delete matched_buy_users;
+        delete matched_buy_volumes;
+        delete matched_buy_ratios;
+        delete matched_sell_users;
+        delete matched_sell_volumes;
+        delete matched_sell_ratios;
+
+        delete line_points;
     }
 
+    // combine match array from gathering all the user's bids
     function _combine_match_array(
         string memory _bid_time, address[] memory _users
     ) private {
@@ -164,8 +243,9 @@ contract EnergyTrading {
         }
     }
 
-    // insertion sort
+    // resorting all bids among users by using insertion sort algorithm
     function _sort_array() private {
+        // buy
         uint256 j;
         uint256 b_price_key;
         uint256 b_volume_key;
@@ -188,6 +268,7 @@ contract EnergyTrading {
                     j = j - 1;
                 }
             }
+            // avoid uint 0 - 1
             if(flag) {
                 buy_prices[0] = b_price_key;
                 buy_volumes[0] = b_volume_key;
@@ -199,6 +280,7 @@ contract EnergyTrading {
             }
         }
 
+        // sell
         uint256 s_price_key;
         uint256 s_volume_key;
         address s_user_key;
@@ -220,6 +302,7 @@ contract EnergyTrading {
                     j = j - 1;
                 }
             }
+            // avoid uint 0 - 1
             if(flag) {
                 sell_prices[0] = s_price_key;
                 sell_volumes[0] = s_volume_key;
@@ -232,17 +315,231 @@ contract EnergyTrading {
         }
     }
 
+    // function to accumulate bids
+    // after sorting, accumulate bids are required
     function _accumulate_array() private {
         uint256 curr_volume = 0;
         for (uint256 i = 0; i < buy_volumes.length; i++) {
-            buy_volumes[i] += curr_volume;
-            curr_volume = buy_volumes[i];
+            ab_volumes.push(buy_volumes[i]);
+            ab_prices.push(buy_prices[i]);
+            ab_users.push(buy_users[i]);
+        }
+        for (uint256 i = 0; i < ab_volumes.length; i++) {
+            ab_volumes[i] += curr_volume;
+            curr_volume = ab_volumes[i];
         }
 
         curr_volume = 0;
         for (uint256 i = 0; i < sell_volumes.length; i++) {
-            sell_volumes[i] += curr_volume;
-            curr_volume = sell_volumes[i];
+            as_volumes.push(sell_volumes[i]);
+            as_prices.push(sell_prices[i]);
+            as_users.push(sell_users[i]);
+        }
+        for (uint256 i = 0; i < as_volumes.length; i++) {
+            as_volumes[i] += curr_volume;
+            curr_volume = as_volumes[i];
+        }
+    }
+
+    // apply 'OR' operation between buy and sell points,
+    // make sure that both lines have same x-axis value
+    // so we can apply 'find the intersection' algorithm
+    // on the array.
+    function _merge_array() private {
+        uint256 i = 0;
+        uint256 j = 0;
+
+        bool loop1 = true;
+        bool loop2 = true;
+
+        while (loop1 && loop2) {
+            if(as_volumes[j] < ab_volumes[i]) {
+                mb_volumes.push(as_volumes[j]);
+                mb_prices.push(ab_prices[i]);
+                mb_users.push(ab_users[i]);
+                j++;
+                if(j == as_volumes.length) {
+                    loop2 = false;
+                    j--;
+                }
+            } else {
+                mb_prices.push(ab_prices[i]);
+                mb_volumes.push(ab_volumes[i]);
+                mb_users.push(ab_users[i]);
+                i++;
+                if(i == ab_volumes.length) {
+                    loop1 = false;
+                    i--;
+                }
+            }
+        }
+        while(loop2) {
+            mb_volumes.push(as_volumes[j]);
+            mb_prices.push(ab_prices[i]);
+            mb_users.push(ab_users[i]);
+            j++;
+            if(j == as_volumes.length) {
+                loop2 = false;
+                j--;
+            }
+        }
+        while(loop1) {
+            mb_volumes.push(ab_volumes[i]);
+            mb_prices.push(ab_prices[i]);
+            mb_users.push(ab_users[i]);
+            i++;
+            if(i == ab_volumes.length) {
+                loop1 = false;
+                i--;
+            }
+        }
+
+        loop1 = true;
+        loop2 = true;
+        i = 0;
+        j = 0;
+        while (loop1 && loop2) {
+            if(ab_volumes[j] < as_volumes[i]) {
+                ms_volumes.push(ab_volumes[j]);
+                if(i == 0) {
+                    ms_prices.push(0);
+                    ms_users.push(address(0));
+                } else {
+                    ms_prices.push(as_prices[i-1]);
+                    ms_users.push(as_users[i-1]);
+                }
+                j++;
+                if(j == ab_volumes.length) {
+                    loop2 = false;
+                    j--;
+                }
+            } else {
+                ms_volumes.push(as_volumes[i]);
+                ms_prices.push(as_prices[i]);
+                ms_users.push(as_users[i]);
+                i++;
+                if(i == as_volumes.length) {
+                    loop1 = false;
+                    i--;
+                }
+            }
+        }
+        while(loop2) {
+            ms_volumes.push(ab_volumes[j]);
+            ms_prices.push(as_prices[i-1]);
+            ms_users.push(as_users[i-1]);
+            j++;
+            if(j == ab_volumes.length) {
+                loop2 = false;
+                j--;
+            }
+        }
+        while(loop1) {
+            ms_volumes.push(as_volumes[i]);
+            ms_prices.push(as_prices[i]);
+            ms_users.push(as_users[i]);
+            i++;
+            if(i == as_volumes.length) {
+                loop1 = false;
+                i++;
+            }
+        }
+    }
+
+    /////////////////////////////
+    //  line helper functions  //
+    /////////////////////////////
+
+    // determinant function
+    function _det(int256[2] memory a, int256[2] memory b) private pure returns(int256) {
+        return a[0] * b[1] - a[1] * b[0];
+    }
+
+    // given two lines (4 points), return whether
+    // these two lines gives an intersection (T/F).
+    function _line_intersection(
+        int256[2] memory l1p1,
+        int256[2] memory l1p2,
+        int256[2] memory l2p1,
+        int256[2] memory l2p2
+    ) private pure returns(bool) {
+        int256[2] memory xdiff = [l1p1[0] - l1p2[0], l2p1[0] - l2p2[0]];
+        int256[2] memory ydiff = [l1p1[1] - l1p2[1], l2p1[1] - l2p2[1]];
+
+        int256 div = _det(xdiff, ydiff);
+        if(div == 0) {
+            return false;
+        }
+
+        int256[2] memory d = [_det(l1p1, l1p2), _det(l2p1, l2p2)];
+        int256 x = _det(d, xdiff) / div;
+        int256 y = _det(d, ydiff) / div;
+
+        bool c1 = x >= l1p1[0] && x <= l1p2[0];
+        bool c2 = y <= l1p1[1] && y >= l1p2[1];
+        bool c3 = x >= l2p1[0] && x <= l2p2[0];
+        bool c4 = y >= l2p1[1] && y <= l2p2[1];
+        if(c1 && c2 && c3 && c4) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    // buy and sell bids are two huge lines that formed
+    // by line segments, so go through the segments
+    // can determine where and which two segments intersect.
+    function _find_intersection() private returns(bool) {
+        bool intersection = false;
+        for (uint256 i = 0; i < mb_volumes.length - 1; i++) {
+            for (uint256 j = 0; j < ms_volumes.length - 1; j++) {
+                if(_line_intersection(
+                    [int256(mb_volumes[i]), int256(mb_prices[i])],
+                    [int256(mb_volumes[i+1]), int256(mb_prices[i+1])],
+                    [int256(ms_volumes[j]), int256(ms_prices[j])],
+                    [int256(ms_volumes[j+1]), int256(ms_prices[j+1])]
+                )) {
+                    emit line_pts(
+                        [int256(mb_volumes[i]), int256(mb_prices[i])],
+                        [int256(mb_volumes[i+1]), int256(mb_prices[i+1])],
+                        [int256(ms_volumes[j]), int256(ms_prices[j])],
+                        [int256(ms_volumes[j+1]), int256(ms_prices[j+1])]
+                    );
+                    line_points.push([int256(mb_volumes[i]), int256(mb_prices[i])]);
+                    line_points.push([int256(mb_volumes[i+1]), int256(mb_prices[i+1])]);
+                    line_points.push([int256(ms_volumes[j]), int256(ms_prices[j])]);
+                    line_points.push([int256(ms_volumes[j+1]), int256(ms_prices[j+1])]);
+                    intersection = true;
+                }
+            }
+        }
+        return intersection;
+    }
+
+    // once the matched price and volume are set,
+    // split the ratio for the matched users.
+    function _find_shares(uint256 _buy_target_price, uint256 _sell_target_price) private {
+        uint256 total_volume = 0;
+        for (uint256 i = 0; i < buy_volumes.length; i++) {
+            if(buy_prices[i] == _buy_target_price) {
+                matched_buy_users.push(buy_users[i]);
+                matched_buy_volumes.push(buy_volumes[i]);
+                total_volume += buy_volumes[i];
+            }
+        }
+        for (uint256 i = 0; i < matched_buy_volumes.length; i++) {
+            matched_buy_ratios.push(matched_buy_volumes[i] * 100 / total_volume);
+        }
+        total_volume = 0;
+        for (uint256 i = 0; i < sell_prices.length; i++) {
+            if(sell_prices[i] == _sell_target_price) {
+                matched_sell_users.push(sell_users[i]);
+                matched_sell_volumes.push(sell_volumes[i]);
+                total_volume += sell_volumes[i];
+            }
+        }
+        for (uint256 i = 0; i < matched_sell_volumes.length; i++) {
+            matched_sell_ratios.push(matched_sell_volumes[i] * 100 / total_volume);
         }
     }
 }
