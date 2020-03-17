@@ -111,14 +111,6 @@ contract EnergyTrading {
     // event that logs the sells and buys array
     event array_log(uint256[] _volume, uint256[] _price, address[] _users);
 
-    // event that logs line_points
-    event line_pts(
-        int256[2] l1p1,
-        int256[2] l1p2,
-        int256[2] l2p1,
-        int256[2] l2p2
-    );
-
     // event that logs matched result
     event match_result(
         bool,
@@ -129,13 +121,6 @@ contract EnergyTrading {
         address[],
         uint256[]
     );
-
-    // function that trigger event of sell and buy
-    function getArrayLog() public {
-        emit array_log(buy_volumes, buy_prices, buy_users);
-        emit array_log(sell_volumes, sell_prices, sell_users);
-    }
-
 
 
     /////////////
@@ -166,6 +151,7 @@ contract EnergyTrading {
             matched_sell_ratios
         );
     }
+
 
     //////////////////////////////
     //  match helper functions  //
@@ -446,6 +432,7 @@ contract EnergyTrading {
         }
     }
 
+
     /////////////////////////////
     //  line helper functions  //
     /////////////////////////////
@@ -499,12 +486,6 @@ contract EnergyTrading {
                     [int256(ms_volumes[j]), int256(ms_prices[j])],
                     [int256(ms_volumes[j+1]), int256(ms_prices[j+1])]
                 )) {
-                    emit line_pts(
-                        [int256(mb_volumes[i]), int256(mb_prices[i])],
-                        [int256(mb_volumes[i+1]), int256(mb_prices[i+1])],
-                        [int256(ms_volumes[j]), int256(ms_prices[j])],
-                        [int256(ms_volumes[j+1]), int256(ms_prices[j+1])]
-                    );
                     line_points.push([int256(mb_volumes[i]), int256(mb_prices[i])]);
                     line_points.push([int256(mb_volumes[i+1]), int256(mb_prices[i+1])]);
                     line_points.push([int256(ms_volumes[j]), int256(ms_prices[j])]);
